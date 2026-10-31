@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 Mattia Egloff <mattia.egloff@pm.me>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# GitLab CI for vauchi-windows-hw, the hardware shell (ADR-077).
+#
+# Docs and licensing gates only, from the shared templates; build and
+# test jobs arrive with the first port.
+
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+    on_job_failure: all
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    # A merge must not cancel a main pipeline other repos wait on (VCI05).
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      auto_cancel:
+        on_new_commit: none
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+default:
+  interruptible: true
+
+include:
+  - project: 'vauchi/scripts'
+    ref: ci-templates-v2026.10.11
+    file:
+      - '/ci-templates/lint-docs.yml'
+      - '/ci-templates/mr-rules.yml'
+      - '/ci-templates/reuse.yml'
+
+variables:
+  VAUCHI_SCRIPTS_REF: "ci-templates-v2026.10.11"
+
+stages:
+  - lint
