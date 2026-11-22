@@ -320,6 +320,23 @@ public class GattCentralTests
     }
 
     [Fact]
+    public async Task AnMtuTheOsRepeatsIsReportedOnce()
+    {
+        // Observed on AC against a Pixel: Windows raises a change carrying the MTU already read.
+        var gatt = new FakeGatt { Mtu = 517 };
+        await using HardwareShell shell = ShellOver(gatt);
+        shell.Execute(new Command.BleConnect { DeviceId = Peer });
+        await shell.Next();
+        await shell.Next();
+        IGattSignals peer = await gatt.Signals;
+
+        peer.MtuChanged(517);
+        peer.Notified(Payload, new byte[] { 1 });
+
+        Assert.IsType<Event.BleCharacteristicNotified>(await shell.Next());
+    }
+
+    [Fact]
     public async Task ANotificationLongerThanAttCarriesIsNotReportedAndTheLinkStaysUp()
     {
         var gatt = new FakeGatt();
