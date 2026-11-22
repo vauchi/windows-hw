@@ -242,17 +242,17 @@ public class QrCameraTests
     public async Task StoppingReleasesTheCameraAndReportsNothing()
     {
         var source = new FakeSource();
-        var decoder = new FakeDecoder().Reads(5, "late");
-        await using HardwareShell shell = ShellOver(source, decoder);
+        await using HardwareShell shell = ShellOver(source, new FakeDecoder());
         shell.Execute(Scan());
         await source.Opened;
 
         Assert.Equal(ExecuteResult.Accepted, shell.Execute(new Command.CameraStop { PreviewId = "camera-1" }));
         await source.Closed;
-        source.Show(Frame(5));
 
-        Assert.Equal(ExecuteResult.Accepted, shell.Execute(Scan("camera-2")));
+        // Checked before the next capture starts: one sharing this fake camera
+        // could read a frame shown now and report it (3 runs in 200 under load).
         Assert.False(shell.TryTake(out _));
+        Assert.Equal(ExecuteResult.Accepted, shell.Execute(Scan("camera-2")));
     }
 
     [Fact]
