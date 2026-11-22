@@ -322,7 +322,7 @@ public class GattCentralTests
     }
 
     [Fact]
-    public async Task ALostPeerIsReportedOnceAndTheLinkIsReleased()
+    public async Task ALostPeerIsReportedOnceAndTheNextDialStartsClean()
     {
         var gatt = new FakeGatt();
         await using HardwareShell shell = ShellOver(gatt);
@@ -340,11 +340,12 @@ public class GattCentralTests
                 DeviceId = Peer, Direction = BleLinkDirection.Outbound, Reason = "the peer disconnected",
             }.Wire(),
             lost.Wire());
-        Assert.False(shell.TryTake(out _));
+        Assert.Equal(ExecuteResult.Accepted, shell.Execute(new Command.BleConnect { DeviceId = Peer }));
+        Assert.Equal(Connected, (await shell.Next()).Wire());
     }
 
     [Fact]
-    public async Task CoresDisconnectReleasesTheLinkAndReportsNothing()
+    public async Task CoresDisconnectReleasesTheLinkAndReportsNothingBeforeTheNextDial()
     {
         var gatt = new FakeGatt();
         await using HardwareShell shell = ShellOver(gatt);
@@ -354,7 +355,38 @@ public class GattCentralTests
         Assert.Equal(ExecuteResult.Accepted, shell.Execute(disconnect));
         await gatt.Released;
 
-        Assert.False(shell.TryTake(out _));
+        Assert.Equal(ExecuteResult.Accepted, shell.Execute(new Command.BleConnect { DeviceId = Peer }));
+        Assert.Equal(Connected, (await shell.Next()).Wire());
+    }
+
+    [Fact]
+    public async Task AReadAnswerLongerThanAttCarriesIsAFailedRead()
+    {
+        var gatt = new FakeGatt();
+        await using HardwareShell shell = ShellOver(gatt);
+        await Linked(shell, gatt);
+        gatt.Values[Payload] = new byte[513];
+
+        shell.Execute(Read(Payload));
+
+        Assert.Equal(Error("Bluetooth read failed"), (await shell.Next()).Wire());
+    }
+
+    [Fact]
+    public async Task APeerLostWhileCoreWritesIsStillReported()
+    {
+        var gatt = new FakeGatt();
+        await using HardwareShell shell = ShellOver(gatt);
+        await Linked(shell, gatt);
+        IGattSignals peer = await gatt.Signals;
+
+        peer.Notified(Payload, new byte[] { 1 });
+        shell.Execute(Write(Inbox, 1));
+        peer.Lost();
+
+        Assert.IsType<Event.BleCharacteristicNotified>(await shell.Next());
+        Assert.IsType<Event.BleDisconnected>(await shell.Next());
+        await gatt.Released;
     }
 
     [Fact]
