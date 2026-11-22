@@ -4,8 +4,10 @@
 
 # GitLab CI for vauchi-windows-hw, the hardware shell (ADR-077).
 #
-# Docs and licensing gates only, from the shared templates; build and
-# test jobs arrive with the first port.
+# The portable library (ports, sessions, the shell) builds and is tested
+# in a Linux container against scripted backends, the contract's shared
+# fixture included (ADR-077 D-7). The Windows backends and the terminal
+# helper build on the Windows runner when they land.
 
 workflow:
   auto_cancel:
@@ -32,13 +34,87 @@ include:
       - '/ci-templates/lint-docs.yml'
       - '/ci-templates/mr-rules.yml'
       - '/ci-templates/reuse.yml'
+      - '/ci-templates/auto-tag.yml'
       - '/ci-templates/github-mirror.yml'
 
 variables:
   VAUCHI_SCRIPTS_REF: "ci-templates-v2026.11.17"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
 
 stages:
+  - auto-tag
   - lint
+  - test
+  - deploy
+
+# A version bump merged to main is the release: the job pushes
+# v<Version of Directory.Build.props> when that tag does not exist yet, so
+# the tag always sits on the merged commit (private#1045).
+auto-tag:version:
+  extends: .auto-tag
+  variables:
+    AUTO_TAG_VERSION_CMD: "sed -n 's:.*<Version>\\(.*\\)</Version>.*:\\1:p' Directory.Build.props | sed -n 1p"
+
+# The portable library names no Windows API, no display toolkit and no
+# Core assembly, and the contract is its only package. The check's own
+# tests plant each violation first (CC-27).
+lint:portable:
+  stage: lint
+  image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/python:3.12-alpine
+  tags: [docker]
+  needs: []
+  script:
+    - python3 ci/tests/check-portable-library.test.py
+    - python3 ci/check-portable-library.py
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Every command and event of the shell against scripted backends, the
+# hardware commands and events of the contract's shared fixture among
+# them, on every merge request: CI runners have no radios (ADR-077 item 9,
+# D-7). The package is built from what was tested.
+contract:replay:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:8.0-alpine3.21
+  tags: [docker]
+  needs: []
+  script:
+    - dotnet restore tests/Vauchi.WindowsHw.Tests/Vauchi.WindowsHw.Tests.csproj --locked-mode
+    - dotnet build tests/Vauchi.WindowsHw.Tests/Vauchi.WindowsHw.Tests.csproj -c Release --no-restore
+    - dotnet test tests/Vauchi.WindowsHw.Tests/Vauchi.WindowsHw.Tests.csproj -c Release --no-build
+    - dotnet pack src/Vauchi.WindowsHw/Vauchi.WindowsHw.csproj -c Release --no-build -o target/nuget
+  artifacts:
+    when: always
+    paths:
+      - target/nuget/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+
+# A release tag publishes the package its own pipeline built and tested to
+# this project's NuGet registry; windows-app pins it from there (ADR-077
+# D-3).
+publish:nuget:
+  stage: deploy
+  image: mcr.microsoft.com/dotnet/sdk:8.0-alpine3.21
+  tags: [docker]
+  needs: ["contract:replay"]
+  script:
+    - |
+      set -eu
+      package="target/nuget/vauchi-windows-hw.${CI_COMMIT_TAG#v}.nupkg"
+      if [ ! -f "$package" ]; then
+        echo "ERROR: tag $CI_COMMIT_TAG has no package $package; Directory.Build.props and the tag disagree"
+        exit 1
+      fi
+      dotnet nuget add source "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/nuget/index.json" --name gitlab --username gitlab-ci-token --password "${CI_JOB_TOKEN}" --store-password-in-clear-text
+      # A retried job finds its package already there and must not fail on it.
+      dotnet nuget push "$package" --source gitlab --skip-duplicate
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
 
 github-mirror:
   extends: .github-mirror
