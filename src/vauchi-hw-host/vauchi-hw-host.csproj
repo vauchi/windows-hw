@@ -1,0 +1,22 @@
+<!-- SPDX-FileCopyrightText: 2026 Mattia Egloff <mattia.egloff@pm.me> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The helper process a terminal starts to reach this machine's
+         hardware (maintainer's selection of 2026-11-22, private#772).
+         Published ahead of time it is one native file with no .NET
+         runtime to install. -->
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>vauchi-hw-host</AssemblyName>
+    <RootNamespace>Vauchi.WindowsHw.Host</RootNamespace>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Vauchi.WindowsHw.Native\Vauchi.WindowsHw.Native.csproj" />
+  </ItemGroup>
+</Project>
