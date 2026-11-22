@@ -91,6 +91,18 @@ public sealed class GattCentral(IGattDialer dialer) : ICentral
     }
 
     /// <summary>
+    /// Generic Access (0x1800) and Generic Attribute (0x1801) belong to the
+    /// Bluetooth stack, which serves them itself; BlueZ never shows them to
+    /// <c>linux-hw</c>. A backend leaves them out: a phone may refuse a
+    /// subscription to their characteristics (a Pixel refuses Service
+    /// Changed), and Core names none of them.
+    /// </summary>
+    public static bool IsStackService(Guid service) => service == GenericAccess || service == GenericAttribute;
+
+    private static readonly Guid GenericAccess = new("00001800-0000-1000-8000-00805f9b34fb");
+    private static readonly Guid GenericAttribute = new("00001801-0000-1000-8000-00805f9b34fb");
+
+    /// <summary>
     /// The decimal form <see cref="BleObservations.Observed"/> hands out,
     /// and no other spelling: a lenient parse would dial a device Core did
     /// not name.
@@ -170,6 +182,7 @@ public sealed class GattCentral(IGattDialer dialer) : ICentral
         private readonly EventSink _events;
         private readonly CancellationToken _stop;
         private readonly Dictionary<string, string> _characteristics = new(StringComparer.Ordinal);
+        private uint? _reportedMtu;
 
         internal Link(string deviceId, IGattLink link, EventSink events, CancellationToken stop)
         {
@@ -263,7 +276,7 @@ public sealed class GattCentral(IGattDialer dialer) : ICentral
                         }
                         break;
                     case Signal.Mtu mtu:
-                        if (!await Report(Negotiated(mtu.Value)).ConfigureAwait(false))
+                        if (mtu.Value != _reportedMtu && !await Report(Negotiated(mtu.Value)).ConfigureAwait(false))
                         {
                             return false;
                         }
@@ -328,7 +341,11 @@ public sealed class GattCentral(IGattDialer dialer) : ICentral
             };
         }
 
-        private Event Negotiated(uint mtu) => new Event.BleMtuNegotiated { DeviceId = _deviceId, Mtu = mtu };
+        private Event Negotiated(uint mtu)
+        {
+            _reportedMtu = mtu;
+            return new Event.BleMtuNegotiated { DeviceId = _deviceId, Mtu = mtu };
+        }
 
         private static Event Failure(string error) => new Event.HardwareError { Transport = "BLE", Error = error };
 

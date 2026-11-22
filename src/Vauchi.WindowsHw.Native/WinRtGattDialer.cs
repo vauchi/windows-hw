@@ -86,7 +86,15 @@ public sealed class WinRtGattDialer : IGattDialer
             {
                 throw new HardwareFailureException(Failure(services.Status));
             }
-            _services.AddRange(services.Services);
+            foreach (GattDeviceService service in services.Services)
+            {
+                if (GattCentral.IsStackService(service.Uuid))
+                {
+                    service.Dispose();
+                    continue;
+                }
+                _services.Add(service);
+            }
             var listed = new List<GattCharacteristic>();
             foreach (GattDeviceService service in _services)
             {
