@@ -7,6 +7,9 @@
          whose projection holds everything used here. -->
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <Platforms>x64</Platforms>
+    <!-- Lets the Linux container compile and pack this project against
+         the Windows SDK's reference assemblies; it runs on Windows only. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <!-- WinSCard's reader-state structure holds a fixed byte array. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PackageId>vauchi-windows-hw-native</PackageId>
