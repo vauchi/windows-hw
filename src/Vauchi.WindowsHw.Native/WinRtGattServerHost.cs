@@ -39,6 +39,8 @@ public sealed class WinRtGattServerHost : IGattServerHost
     {
         private readonly Dictionary<string, GattLocalCharacteristic> _published = new(StringComparer.Ordinal);
         private readonly List<GattServiceProvider> _providers = new();
+        // Filled before any provider advertises and never changed after: a status
+        // callback still in flight when the service is withdrawn reads it.
         private readonly Dictionary<GattServiceProvider, TaskCompletionSource> _started = new();
 
         internal async Task PublishAsync(GattServerLayout layout, CancellationToken stop)
@@ -121,7 +123,6 @@ public sealed class WinRtGattServerHost : IGattServerHost
                 }
             }
             _providers.Clear();
-            _started.Clear();
             return ValueTask.CompletedTask;
         }
 
@@ -152,20 +153,18 @@ public sealed class WinRtGattServerHost : IGattServerHost
                 started.TrySetResult();
                 return;
             }
-            if (arguments.Status != GattServiceProviderAdvertisementStatus.Aborted)
+            // Observed on Windows 11 (AC, 2026-11-22): a provider reports Aborted
+            // with no error right after StartAdvertising and again when the
+            // other provider starts, each time followed by Started. Windows is
+            // restarting the advertisement, so only an error is it giving up.
+            if (arguments.Status != GattServiceProviderAdvertisementStatus.Aborted
+                || arguments.Error == BluetoothError.Success)
             {
                 return;
             }
-            // Observed on Windows 11 (AC, 2026-11-22): a provider reports Aborted
-            // with no error right after StartAdvertising, then Started. Only an
-            // error, or Aborted after Started, is the OS giving up.
-            if (started.Task.IsCompletedSuccessfully)
+            if (!started.TrySetException(new HardwareFailureException(WinRtDiscovery.Failure(arguments.Error))))
             {
                 centrals.Withdrawn();
-            }
-            else if (arguments.Error != BluetoothError.Success)
-            {
-                started.TrySetException(new HardwareFailureException(WinRtDiscovery.Failure(arguments.Error)));
             }
         }
 
