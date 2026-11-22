@@ -19,6 +19,7 @@ var backends = new Backends
 {
     Discovery = new WinRtDiscovery(),
     Central = new GattCentral(new WinRtGattDialer()),
+    Advertising = new GattPeripheral(new WinRtGattServerHost()),
     Nfc = new PcscReader(new WinSCard()),
     Direct = new TcpDirectExchange(),
 };

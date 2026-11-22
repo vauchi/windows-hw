@@ -77,6 +77,60 @@ if (args.Length > 0 && args[0] == "survey")
     return;
 }
 
+if (args.Length > 0 && args[0] == "publish")
+{
+    // publish [seconds]: each OS step of the peripheral by itself, with what
+    // Windows answers, for a machine where the port only says "failed".
+    var steps = new List<Windows.Devices.Bluetooth.GenericAttributeProfile.GattServiceProvider>();
+    async Task Step(string uuid, bool withCharacteristic)
+    {
+        try
+        {
+            var created = await Windows.Devices.Bluetooth.GenericAttributeProfile.GattServiceProvider.CreateAsync(Guid.Parse(uuid));
+            Console.WriteLine($"create {uuid}: {created.Error}");
+            if (created.ServiceProvider is null)
+            {
+                return;
+            }
+            steps.Add(created.ServiceProvider);
+            if (withCharacteristic)
+            {
+                var parameters = new Windows.Devices.Bluetooth.GenericAttributeProfile.GattLocalCharacteristicParameters
+                {
+                    CharacteristicProperties =
+                        Windows.Devices.Bluetooth.GenericAttributeProfile.GattCharacteristicProperties.Read
+                        | Windows.Devices.Bluetooth.GenericAttributeProfile.GattCharacteristicProperties.Notify,
+                };
+                var characteristic = await created.ServiceProvider.Service.CreateCharacteristicAsync(
+                    Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567891"), parameters);
+                Console.WriteLine($"  characteristic: {characteristic.Error}");
+            }
+            created.ServiceProvider.AdvertisementStatusChanged += (_, changed) =>
+                Console.WriteLine($"  status {uuid}: {changed.Status} error {changed.Error}");
+            created.ServiceProvider.StartAdvertising(
+                new Windows.Devices.Bluetooth.GenericAttributeProfile.GattServiceProviderAdvertisingParameters
+                {
+                    IsConnectable = true, IsDiscoverable = true,
+                });
+            Console.WriteLine($"  advertising started: {created.ServiceProvider.AdvertisementStatus}");
+        }
+        catch (Exception refused)
+        {
+            Console.WriteLine($"  threw 0x{refused.HResult:X8} {refused.GetType().Name}: {refused.Message}");
+        }
+    }
+
+    await Step("a1b2c3d4-e5f6-7890-abcd-ef1234567890", withCharacteristic: true);
+    await Step("0000abcd-0000-1000-8000-00805f9b34fb", withCharacteristic: false);
+    await Task.Delay(TimeSpan.FromSeconds(args.Length > 1 ? int.Parse(args[1]) : 3));
+    foreach (var provider in steps)
+    {
+        Console.WriteLine($"final status: {provider.AdvertisementStatus}");
+        provider.StopAdvertising();
+    }
+    return;
+}
+
 if (args.Length > 1 && args[0] == "dial")
 {
     // dial <service-uuid> [seconds]: the first device advertising the

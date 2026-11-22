@@ -57,6 +57,43 @@ public static class BleObservations
     }
 
     private const int CanonicalLength = 36;
+
+    /// <summary>
+    /// The central behind a Windows device id, in the decimal form
+    /// <see cref="Observed"/> gives a discovered device. Windows ends the
+    /// id with the remote address as six hex pairs; anything else is
+    /// reported unaddressed, Core's wildcard for the link.
+    /// </summary>
+    public static string CentralId(string osDeviceId)
+    {
+        ArgumentNullException.ThrowIfNull(osDeviceId);
+        int dash = osDeviceId.LastIndexOf('-');
+        if (dash < 0 || osDeviceId.Length - dash - 1 != AddressLength)
+        {
+            return "";
+        }
+        ulong address = 0;
+        for (int index = 0; index < AddressLength; index++)
+        {
+            char character = osDeviceId[dash + 1 + index];
+            if (index % 3 == 2)
+            {
+                if (character != ':')
+                {
+                    return "";
+                }
+                continue;
+            }
+            if (!char.IsAsciiHexDigit(character))
+            {
+                return "";
+            }
+            address = (address << 4) | (uint)Convert.ToInt32(character.ToString(), 16);
+        }
+        return address.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private const int AddressLength = 17;
 }
 
 /// <summary>What a Windows error code means for a port.</summary>
