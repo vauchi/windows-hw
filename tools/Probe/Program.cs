@@ -131,6 +131,92 @@ if (args.Length > 0 && args[0] == "publish")
     return;
 }
 
+if (args.Length > 1 && args[0] == "steps")
+{
+    // steps <service-uuid> [seconds]: the central's OS calls one at a time
+    // against the first peer advertising the service, with what Windows
+    // answers to each, for a link the port only reports as failed.
+    var heard = new TaskCompletionSource<BluetoothLEAdvertisementReceivedEventArgs>();
+    var listening = new BluetoothLEAdvertisementWatcher { ScanningMode = BluetoothLEScanningMode.Active };
+    listening.AdvertisementFilter.Advertisement.ServiceUuids.Add(Guid.Parse(args[1]));
+    listening.Received += (_, advertisement) => heard.TrySetResult(advertisement);
+    listening.Start();
+    var first = await heard.Task.WaitAsync(TimeSpan.FromSeconds(args.Length > 2 ? int.Parse(args[2]) : 60));
+    listening.Stop();
+    Console.WriteLine($"heard {first.BluetoothAddress} type {first.BluetoothAddressType} rssi {first.RawSignalStrengthInDBm} connectable {first.IsConnectable}");
+    async Task<T?> Try<T>(string step, Func<Task<T>> call) where T : class
+    {
+        var clock = Stopwatch.StartNew();
+        try
+        {
+            T result = await call();
+            Console.WriteLine($"{clock.ElapsedMilliseconds,6} ms  {step}: {(result is null ? "null" : "ok")}");
+            return result;
+        }
+        catch (Exception failed)
+        {
+            Console.WriteLine($"{clock.ElapsedMilliseconds,6} ms  {step}: threw 0x{failed.HResult:X8} {failed.GetType().Name}: {failed.Message.Trim()}");
+            return null;
+        }
+    }
+    var peer = await Try("FromBluetoothAddressAsync(address)",
+        () => Windows.Devices.Bluetooth.BluetoothLEDevice.FromBluetoothAddressAsync(first.BluetoothAddress).AsTask());
+    peer ??= await Try("FromBluetoothAddressAsync(address, type)",
+        () => Windows.Devices.Bluetooth.BluetoothLEDevice.FromBluetoothAddressAsync(first.BluetoothAddress, first.BluetoothAddressType).AsTask());
+    if (peer is null)
+    {
+        return;
+    }
+    Console.WriteLine($"device id {peer.BluetoothDeviceId.Id} status {peer.ConnectionStatus}");
+    var session = await Try("GattSession.FromDeviceIdAsync",
+        () => Windows.Devices.Bluetooth.GenericAttributeProfile.GattSession.FromDeviceIdAsync(peer.BluetoothDeviceId).AsTask());
+    if (session is not null)
+    {
+        session.MaintainConnection = true;
+        Console.WriteLine($"session max pdu {session.MaxPduSize} status {session.SessionStatus}");
+    }
+    foreach (var mode in new[] { Windows.Devices.Bluetooth.BluetoothCacheMode.Uncached, Windows.Devices.Bluetooth.BluetoothCacheMode.Cached })
+    {
+        var services = await Try($"GetGattServicesAsync({mode})", () => peer.GetGattServicesAsync(mode).AsTask());
+        if (services is null)
+        {
+            continue;
+        }
+        Console.WriteLine($"  status {services.Status} protocol error {services.ProtocolError} services {services.Services.Count}; peer status {peer.ConnectionStatus}");
+        foreach (var gattService in services.Services)
+        {
+            var characteristics = await Try($"  {gattService.Uuid} characteristics", () => gattService.GetCharacteristicsAsync(Windows.Devices.Bluetooth.BluetoothCacheMode.Uncached).AsTask());
+            if (characteristics is null)
+            {
+                continue;
+            }
+            Console.WriteLine($"    status {characteristics.Status} count {characteristics.Characteristics.Count}");
+            foreach (var characteristic in characteristics.Characteristics)
+            {
+                Console.WriteLine($"    {characteristic.Uuid} {characteristic.CharacteristicProperties}");
+                if ((characteristic.CharacteristicProperties & (Windows.Devices.Bluetooth.GenericAttributeProfile.GattCharacteristicProperties.Notify | Windows.Devices.Bluetooth.GenericAttributeProfile.GattCharacteristicProperties.Indicate)) == 0)
+                {
+                    continue;
+                }
+                var how = characteristic.CharacteristicProperties.HasFlag(Windows.Devices.Bluetooth.GenericAttributeProfile.GattCharacteristicProperties.Notify)
+                    ? Windows.Devices.Bluetooth.GenericAttributeProfile.GattClientCharacteristicConfigurationDescriptorValue.Notify
+                    : Windows.Devices.Bluetooth.GenericAttributeProfile.GattClientCharacteristicConfigurationDescriptorValue.Indicate;
+                var subscribed = await Try<object>("      subscribe", async () =>
+                    (object)await characteristic.WriteClientCharacteristicConfigurationDescriptorWithResultAsync(how));
+                if (subscribed is Windows.Devices.Bluetooth.GenericAttributeProfile.GattWriteResult written)
+                {
+                    Console.WriteLine($"      -> {written.Status} protocol error {written.ProtocolError}");
+                }
+            }
+        }
+        break;
+    }
+    Console.WriteLine($"max pdu after discovery {session?.MaxPduSize}; peer status {peer.ConnectionStatus}");
+    session?.Dispose();
+    peer.Dispose();
+    return;
+}
+
 if (args.Length > 1 && args[0] == "dial")
 {
     // dial <service-uuid> [seconds]: the first device advertising the
