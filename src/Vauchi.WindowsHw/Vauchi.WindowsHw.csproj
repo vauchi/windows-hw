@@ -1,0 +1,16 @@
+<!-- SPDX-FileCopyrightText: 2026 Mattia Egloff <mattia.egloff@pm.me> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- No Windows target: ports, sessions and the shell run wherever .NET
+         does, so the fixtures replay in a Linux container (ADR-077 D-7). -->
+    <TargetFramework>net8.0</TargetFramework>
+    <PackageId>vauchi-windows-hw</PackageId>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://gitlab.com/vauchi/windows-hw</RepositoryUrl>
+    <Description>Vauchi's hardware shell for Windows: ports, sessions and the shell that routes Core's hardware commands (ADR-077)</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Vauchi.Contract" Version="[$(VauchiContractVersion)]" />
+  </ItemGroup>
+</Project>
