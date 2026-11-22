@@ -77,6 +77,35 @@ if (args.Length > 0 && args[0] == "survey")
     return;
 }
 
+if (args.Length > 1 && args[0] == "dial")
+{
+    // dial <service-uuid> [seconds]: the first device advertising the
+    // service is dialled, and what the link reports is printed.
+    int patience = args.Length > 2 ? int.Parse(args[2]) : 15;
+    var radio = new Backends { Discovery = new WinRtDiscovery(), Central = new GattCentral(new WinRtGattDialer()) };
+    await using var dialling = new HardwareShell(radio, await WindowsProbe.ProbeAsync());
+    Console.WriteLine($"scan {args[1]}: {dialling.Execute(new Command.BleStartScanning { ServiceUuid = args[1] })}");
+    using var until = new CancellationTokenSource(TimeSpan.FromSeconds(patience));
+    var since = Stopwatch.StartNew();
+    bool dialled = false;
+    while (await dialling.NextAsync(until.Token) is { } reported)
+    {
+        if (reported is Event.BleAdvertisementObserved seen)
+        {
+            if (!dialled)
+            {
+                dialled = true;
+                Console.WriteLine($"stop scan: {dialling.Execute(new Command.BleStopScanning())}");
+                Console.WriteLine($"dial {seen.Value.Id}: {dialling.Execute(new Command.BleConnect { DeviceId = seen.Value.Id })}");
+            }
+            continue;
+        }
+        Console.WriteLine($"{since.ElapsedMilliseconds,6} ms  " + Encoding.UTF8.GetString(ContractJson.EncodeEvent(reported)));
+    }
+    Console.WriteLine(dialled ? "done" : $"nothing advertised {args[1]} in {patience} s");
+    return;
+}
+
 string service = args.Length > 0 ? args[0] : "0000fd6f-0000-1000-8000-00805f9b34fb";
 int seconds = args.Length > 1 ? int.Parse(args[1]) : 5;
 

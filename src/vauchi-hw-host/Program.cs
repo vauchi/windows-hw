@@ -18,6 +18,7 @@ DeviceCapabilities device = await WindowsProbe.ProbeAsync();
 var backends = new Backends
 {
     Discovery = new WinRtDiscovery(),
+    Central = new GattCentral(new WinRtGattDialer()),
     Nfc = new PcscReader(new WinSCard()),
     Direct = new TcpDirectExchange(),
 };
