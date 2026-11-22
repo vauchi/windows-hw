@@ -199,13 +199,31 @@ public sealed class GattCentral(IGattDialer dialer) : ICentral
             {
                 return;
             }
+            // Ends the wait the link leaves pending when the other one ended it.
+            using var waiting = CancellationTokenSource.CreateLinkedTokenSource(_stop);
+            try
+            {
+                await ServeAsync(requests, signals, waiting.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                waiting.Cancel();
+            }
+        }
+
+        private async Task ServeAsync(
+            ChannelReader<LinkRequest> requests,
+            ChannelReader<Signal> signals,
+            CancellationToken waiting)
+        {
             Task<bool>? request = null;
             Task<bool>? signal = null;
             while (true)
             {
-                request ??= requests.WaitToReadAsync(_stop).AsTask();
-                signal ??= signals.WaitToReadAsync(_stop).AsTask();
-                Task<bool> ready = await Task.WhenAny(request, signal).ConfigureAwait(false);
+                request ??= requests.WaitToReadAsync(waiting).AsTask();
+                signal ??= signals.WaitToReadAsync(waiting).AsTask();
+                // Signals first: Core's writes must not hold the peer's chunks back until they overflow.
+                Task<bool> ready = await Task.WhenAny(signal, request).ConfigureAwait(false);
                 if (ready == signal)
                 {
                     signal = null;
@@ -297,7 +315,7 @@ public sealed class GattCentral(IGattDialer dialer) : ICentral
             byte[]? data = _characteristics.TryGetValue(read.Uuid.ToLowerInvariant(), out string? uuid)
                 ? await _link.ReadAsync(uuid, _stop).ConfigureAwait(false)
                 : null;
-            if (data is null)
+            if (data is not { Length: <= MaxAttributeValue })
             {
                 return Failure("Bluetooth read failed");
             }

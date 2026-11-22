@@ -80,7 +80,6 @@ public sealed class WinRtGattDialer : IGattDialer
             // Without it Windows drops the link once no operation is pending.
             _session.MaintainConnection = true;
             _session.MaxPduSizeChanged += OnMaxPduSize;
-            Mtu = _session.MaxPduSize;
             GattDeviceServicesResult services =
                 await Os(() => device.GetGattServicesAsync(BluetoothCacheMode.Uncached), stop).ConfigureAwait(false);
             if (services.Status != GattCommunicationStatus.Success)
@@ -94,10 +93,14 @@ public sealed class WinRtGattDialer : IGattDialer
                 GattCharacteristicsResult characteristics =
                     await Os(() => service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached), stop)
                         .ConfigureAwait(false);
+                if (characteristics.Status == GattCommunicationStatus.AccessDenied)
+                {
+                    // Windows keeps some services to itself; Core names none of them.
+                    continue;
+                }
                 if (characteristics.Status != GattCommunicationStatus.Success)
                 {
-                    // Windows keeps some services to itself (access denied); Core names none of them.
-                    continue;
+                    throw new HardwareFailureException(HardwareFailure.Failed);
                 }
                 foreach (var characteristic in characteristics.Characteristics)
                 {
@@ -109,6 +112,8 @@ public sealed class WinRtGattDialer : IGattDialer
                 }
             }
             Characteristics = listed;
+            // After discovery: until Windows has connected, the session names ATT's default.
+            Mtu = _session.MaxPduSize;
         }
 
         public async Task<bool> SubscribeAsync(string uuid, CancellationToken stop)
@@ -180,22 +185,46 @@ public sealed class WinRtGattDialer : IGattDialer
 
         private void OnConnectionStatus(BluetoothLEDevice sender, object arguments)
         {
-            if (sender.ConnectionStatus == BluetoothConnectionStatus.Disconnected)
+            Guarded(() =>
             {
-                signals.Lost();
-            }
+                if (sender.ConnectionStatus == BluetoothConnectionStatus.Disconnected)
+                {
+                    signals.Lost();
+                }
+            });
         }
 
-        private void OnMaxPduSize(GattSession sender, object arguments) => signals.MtuChanged(sender.MaxPduSize);
+        private void OnMaxPduSize(GattSession sender, object arguments) =>
+            Guarded(() => signals.MtuChanged(sender.MaxPduSize));
 
         private void OnValueChanged(
             Windows.Devices.Bluetooth.GenericAttributeProfile.GattCharacteristic sender,
             GattValueChangedEventArgs arguments)
         {
-            // Bounded before it is copied: an attribute value is at most 512 bytes.
-            if (arguments.CharacteristicValue.Length <= GattCentral.MaxAttributeValue)
+            Guarded(() =>
             {
-                signals.Notified(sender.Uuid.ToString("D"), Bytes(arguments.CharacteristicValue));
+                // Bounded before it is copied: an attribute value is at most 512 bytes.
+                if (arguments.CharacteristicValue.Length <= GattCentral.MaxAttributeValue)
+                {
+                    signals.Notified(sender.Uuid.ToString("D"), Bytes(arguments.CharacteristicValue));
+                }
+            });
+        }
+
+        /// <summary>
+        /// A callback Windows delivers while the link is being released
+        /// reads a closed object. Its exception has no caller to reach and
+        /// would end the process; the link is over either way.
+        /// </summary>
+        private static void Guarded(Action callback)
+        {
+            try
+            {
+                callback();
+            }
+            catch (Exception released) when (released is ObjectDisposedException or InvalidOperationException
+                or System.Runtime.InteropServices.COMException)
+            {
             }
         }
 
