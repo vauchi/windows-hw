@@ -28,7 +28,7 @@ public class GattPeripheralTests
     /// <summary>The OS side of a published service: what was asked of it and a handle on the port's callbacks.</summary>
     private sealed class FakeHost : IGattServerHost, IGattServer
     {
-        private readonly TaskCompletionSource<IGattCentrals> _published = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource<IGattCentrals> _published = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _withdrawn = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _notified = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -42,6 +42,10 @@ public class GattPeripheralTests
         public Task<IGattCentrals> Centrals => _published.Task.WaitAsync(Wait.Limit);
 
         public Task Withdrawn => _withdrawn.Task.WaitAsync(Wait.Limit);
+
+        /// <summary>Forgets the published service, so the next one's centrals can be awaited.</summary>
+        public void ExpectAnother() =>
+            _published = new TaskCompletionSource<IGattCentrals>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task Notified => _notified.Task.WaitAsync(Wait.Limit);
 
@@ -275,20 +279,102 @@ public class GattPeripheralTests
     }
 
     [Fact]
-    public async Task StoppingWithdrawsTheServiceAndReportsNothing()
+    public async Task StoppingWithdrawsTheServiceAndWhatACentralDoesAfterwardsIsNotReported()
     {
         var host = new FakeHost();
         await using HardwareShell shell = ShellOver(host);
-        await Published(shell, host, 1, 2);
+        IGattCentrals stopped = await Published(shell, host, 1, 2);
 
         Assert.Equal(ExecuteResult.Accepted, shell.Execute(new Command.BleStopAdvertising()));
         await host.Withdrawn;
+        bool taken = await stopped.WrittenAsync(Phone, Inbox, new byte[] { 9 }, 247);
+        stopped.Withdrawn();
 
-        var again = new FakeHost();
-        await using HardwareShell next = ShellOver(again);
-        IGattCentrals centrals = await Published(next, again, 1, 2);
+        host.ExpectAnother();
+        IGattCentrals centrals = await Published(shell, host, 1, 2);
         await centrals.SubscriptionChangedAsync(Payload, subscribed: true);
-        Assert.IsType<Event.BleConnected>(await next.Next());
+        Assert.False(taken);
+        Assert.Equal(
+            new Event.BleConnected { DeviceId = "", Direction = BleLinkDirection.Inbound }.Wire(),
+            (await shell.Next()).Wire());
+    }
+
+    /// <summary>What the inbox of a GATT port holds (<c>HardwareShell</c>'s limits).</summary>
+    private const int InboxHolds = 64;
+
+    [Fact]
+    public async Task WritesAreAnsweredNoFasterThanCoreTakesThem()
+    {
+        var host = new FakeHost();
+        await using HardwareShell shell = ShellOver(host);
+        IGattCentrals centrals = await Published(shell, host, 1, 2);
+        const int Writes = 300;
+
+        Task<bool>[] answers = Enumerable.Range(0, Writes)
+            .Select(chunk => centrals.WrittenAsync(Phone, Inbox, new[] { (byte)chunk }, null)).ToArray();
+        for (int taken = 1; taken <= Writes; taken++)
+        {
+            int answeredBefore = answers.Count(answer => answer.IsCompleted);
+            await shell.Next();
+            // One more than the inbox: the write whose event was just taken.
+            Assert.InRange(answeredBefore, 0, taken + InboxHolds);
+        }
+
+        Assert.All(await Task.WhenAll(answers).WaitAsync(Wait.Limit), Assert.True);
+    }
+
+    [Fact]
+    public async Task WritesWaitingForRoomAreRefusedWhenCoreStops()
+    {
+        var host = new FakeHost();
+        await using HardwareShell shell = ShellOver(host);
+        IGattCentrals centrals = await Published(shell, host, 1, 2);
+        Task<bool>[] answers = Enumerable.Range(0, 300)
+            .Select(chunk => centrals.WrittenAsync(Phone, Inbox, new[] { (byte)chunk }, null)).ToArray();
+
+        shell.Execute(new Command.BleStopAdvertising());
+        bool[] taken = await Task.WhenAll(answers).WaitAsync(Wait.Limit);
+
+        Assert.Contains(false, taken);
+        await host.Withdrawn;
+    }
+
+    [Fact]
+    public async Task ACentralsMtuIsNeverSeparatedFromTheWriteThatCarriedIt()
+    {
+        var host = new FakeHost();
+        await using HardwareShell shell = ShellOver(host);
+        IGattCentrals centrals = await Published(shell, host, 1, 2);
+        const int Writers = 8;
+        const int Each = 60;
+
+        Task[] writing = Enumerable.Range(0, Writers).Select(writer => Task.Run(async () =>
+        {
+            string central = writer.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            for (int chunk = 0; chunk < Each; chunk++)
+            {
+                await centrals.WrittenAsync(central, Inbox, new[] { (byte)chunk }, (uint)(100 + writer));
+            }
+        })).ToArray();
+        var reported = new List<Event>();
+        int writes = 0;
+        while (writes < Writers * Each)
+        {
+            Event next = await shell.Next();
+            reported.Add(next);
+            writes += next is Event.BleCharacteristicNotified ? 1 : 0;
+        }
+        await Task.WhenAll(writing).WaitAsync(Wait.Limit);
+
+        for (int index = 0; index < reported.Count; index++)
+        {
+            if (reported[index] is Event.BleMtuNegotiated negotiated)
+            {
+                var carried = Assert.IsType<Event.BleCharacteristicNotified>(reported[index + 1]);
+                Assert.Equal(negotiated.DeviceId, carried.DeviceId);
+                Assert.Equal(100u + uint.Parse(negotiated.DeviceId, System.Globalization.CultureInfo.InvariantCulture), negotiated.Mtu);
+            }
+        }
     }
 
     [Fact]
