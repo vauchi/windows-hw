@@ -97,6 +97,48 @@ contract:replay:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
 
+# The Windows backends and the helper on Windows (pam): the library's tests,
+# the helper driven as a process, and the helper compiled ahead of time with
+# the same process tests run against that file. The container above only
+# compiles the backends; this is where they load. Each native command's exit
+# code is checked: PowerShell carries on past a failed one, and a failed
+# publish leaves the previous file for the tests to pass against.
+test:windows:
+  stage: test
+  tags: [windows, dotnet]
+  needs: []
+  variables:
+    NUGET_PACKAGES: $CI_PROJECT_DIR/.nuget-packages
+  script:
+    - |
+      $ErrorActionPreference = 'Stop'
+      function Run { param([string]$What, [scriptblock]$Command)
+        Write-Host "== $What"
+        & $Command
+        if ($LASTEXITCODE -ne 0) { throw "$What failed with exit code $LASTEXITCODE" }
+      }
+      # The ahead-of-time linker is found through vswhere, which is not on PATH by default.
+      $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+      if (Test-Path "$installer\vswhere.exe") { $env:PATH = "$env:PATH;$installer" } else { Write-Host "no vswhere at $installer" }
+      Run 'dotnet' { dotnet --version }
+      Run 'library tests' { dotnet test tests/Vauchi.WindowsHw.Tests/Vauchi.WindowsHw.Tests.csproj -c Release }
+      Run 'probe build' { dotnet build tools/Probe/Probe.csproj -c Release }
+      Run 'helper process tests' { dotnet test tests/Vauchi.WindowsHw.Host.Tests/Vauchi.WindowsHw.Host.Tests.csproj -c Release }
+      if (Test-Path target/host-aot) { Remove-Item -Recurse -Force target/host-aot }
+      Run 'helper ahead of time' { dotnet publish src/vauchi-hw-host/vauchi-hw-host.csproj -c Release -r win-x64 -o target/host-aot }
+      $helper = (Resolve-Path target/host-aot/vauchi-hw-host.exe).Path
+      Write-Host "helper: $helper, $((Get-Item $helper).Length) bytes"
+      $env:VAUCHI_HW_HOST = $helper
+      Run 'helper process tests, ahead of time' { dotnet test tests/Vauchi.WindowsHw.Host.Tests/Vauchi.WindowsHw.Host.Tests.csproj -c Release --no-build }
+  artifacts:
+    when: on_success
+    expire_in: 2 weeks
+    paths:
+      - target/host-aot/vauchi-hw-host.exe
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 # A release tag publishes the two packages its own pipeline built to this
 # project's NuGet registry: the portable library, which was tested here,
 # and the Windows backends. windows-app pins them from there (ADR-077 D-3).
