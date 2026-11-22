@@ -138,6 +138,72 @@ test:windows:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+
+# The signing step of publish:helper with a throwaway key, on every merge
+# request: publish:helper runs only on a release tag, too late to learn it
+# is broken. Same image and cosign as publish:helper.
+test:sign-helper:
+  stage: test
+  image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/alpine:3.21
+  tags: [docker]
+  needs: []
+  script:
+    - |
+      set -eu
+      apk add --no-cache curl >/dev/null
+      curl -sSfL "https://github.com/sigstore/cosign/releases/download/v3.0.5/cosign-linux-amd64" -o /usr/local/bin/cosign
+      echo "db15cc99e6e4837daabab023742aaddc3841ce57f193d11b7c3e06c8003642b2  /usr/local/bin/cosign" | sha256sum -c -
+      chmod +x /usr/local/bin/cosign
+      sh ci/tests/sign-helper.test.sh
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - ci/sign-helper.sh
+        - ci/tests/sign-helper.test.sh
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# A release tag publishes the helper test:windows built and tested on that
+# tag, as Core publishes its Windows DLL (core ci/package.yml): the file, its
+# SHA-256, and a cosign bundle over the checksum signed with the group's
+# COSIGN_KEY, whose public half windows-app ships as cosign.pub. The bundle
+# is verified here before anything is uploaded.
+publish:helper:
+  stage: deploy
+  image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/alpine:3.21
+  tags: [docker]
+  needs: ["test:windows"]
+  script:
+    - |
+      set -eu
+      apk add --no-cache curl >/dev/null
+      COSIGN_VERSION="v3.0.5"
+      COSIGN_SHA256="db15cc99e6e4837daabab023742aaddc3841ce57f193d11b7c3e06c8003642b2"
+      curl -sSfL "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" -o /usr/local/bin/cosign
+      echo "${COSIGN_SHA256}  /usr/local/bin/cosign" | sha256sum -c -
+      chmod +x /usr/local/bin/cosign
+      helper=target/host-aot/vauchi-hw-host.exe
+      if [ ! -s "$helper" ]; then
+        echo "ERROR: test:windows left no $helper for tag $CI_COMMIT_TAG"
+        exit 1
+      fi
+      sh ci/sign-helper.sh "$helper" dist
+      base="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/vauchi-hw-host/${CI_COMMIT_TAG#v}"
+      for file in vauchi-hw-host.exe vauchi-hw-host.exe.sha256 vauchi-hw-host.exe.sha256.bundle; do
+        status=$(curl -s -o upload.out -w '%{http_code}' --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+          --upload-file "dist/$file" "$base/$file") || status=000
+        case "$status" in
+          200|201) echo "uploaded $file" ;;
+          *) echo "ERROR: uploading $file answered HTTP $status: $(head -c 300 upload.out)"; exit 1 ;;
+        esac
+      done
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
 
 # A release tag publishes the two packages its own pipeline built to this
 # project's NuGet registry: the portable library, which was tested here,
