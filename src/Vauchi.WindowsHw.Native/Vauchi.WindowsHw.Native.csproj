@@ -7,6 +7,8 @@
          whose projection holds everything used here. -->
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <Platforms>x64</Platforms>
+    <!-- WinSCard's reader-state structure holds a fixed byte array. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PackageId>vauchi-windows-hw-native</PackageId>
     <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     <RepositoryUrl>https://gitlab.com/vauchi/windows-hw</RepositoryUrl>

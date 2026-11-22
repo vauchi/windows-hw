@@ -7,6 +7,8 @@
 // since the scan command.
 //
 //   Probe [service uuid] [seconds]
+//   Probe nfc [seconds]        wait for a card on any reader and say what
+//                              the smart-card service answers
 //   Probe survey [seconds]     which service UUIDs are advertised nearby,
 //                              with no filter: what a scan could find
 
@@ -21,6 +23,25 @@ using Vauchi.Contract;
 using Vauchi.WindowsHw;
 using Vauchi.WindowsHw.Native;
 using Windows.Devices.Bluetooth.Advertisement;
+
+if (args.Length > 0 && args[0] == "nfc")
+{
+    using var patience = new CancellationTokenSource(TimeSpan.FromSeconds(args.Length > 1 ? int.Parse(args[1]) : 5));
+    try
+    {
+        using INfcCard card = await new PcscReader(new WinSCard()).WaitForTagAsync(patience.Token);
+        Console.WriteLine("a card is connected");
+    }
+    catch (NfcException refused)
+    {
+        Console.WriteLine("the smart-card service says: " + refused.Message);
+    }
+    catch (OperationCanceledException)
+    {
+        Console.WriteLine("a reader is there and no card arrived");
+    }
+    return;
+}
 
 if (args.Length > 0 && args[0] == "survey")
 {
