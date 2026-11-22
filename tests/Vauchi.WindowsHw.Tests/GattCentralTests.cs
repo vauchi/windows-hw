@@ -118,6 +118,20 @@ public class GattCentralTests
         return gatt;
     }
 
+    [Theory]
+    [InlineData("00001800-0000-1000-8000-00805f9b34fb", true)]
+    [InlineData("00001801-0000-1000-8000-00805f9b34fb", true)]
+    [InlineData("00001801-0000-1000-8000-00805F9B34FB", true)]
+    [InlineData("a1b2c3d4-e5f6-7890-abcd-ef1234567890", false)]
+    [InlineData("0000180a-0000-1000-8000-00805f9b34fb", false)]
+    [InlineData("00001801-0000-1000-8000-00805f9b34fc", false)]
+    public void TheStacksOwnServicesAreTheBluetoothStacksAndNoOther(string service, bool stacks)
+    {
+        // Observed on a Pixel, 2026-11-22: subscribing to Service Changed
+        // (0x2a05) in Generic Attribute is refused with ATT error 3.
+        Assert.Equal(stacks, GattCentral.IsStackService(Guid.Parse(service)));
+    }
+
     [Fact]
     public async Task ADialSubscribesEveryNotifyingCharacteristicThenReportsTheMtuAndTheConnection()
     {
