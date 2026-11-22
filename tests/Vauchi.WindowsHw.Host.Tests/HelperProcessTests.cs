@@ -86,9 +86,10 @@ public sealed class HelperProcessTests : IDisposable
             .GetProperty("HardwareCapabilitiesReported").GetProperty("capabilities");
         Assert.Equal("Desktop", capabilities.GetProperty("platform").GetString());
         Assert.True(capabilities.GetProperty("has_internet").GetBoolean());
-        // Advertising and links are not wired yet, so Bluetooth is not claimed.
-        Assert.False(capabilities.GetProperty("has_ble").GetBoolean());
-        Assert.False(capabilities.GetProperty("has_nfc").GetBoolean());
+        // Bluetooth and NFC are this machine's to answer: every backend for
+        // them is wired. No camera backend is, so a camera is never claimed.
+        Assert.Contains(capabilities.GetProperty("has_ble").ValueKind, new[] { JsonValueKind.True, JsonValueKind.False });
+        Assert.Contains(capabilities.GetProperty("has_nfc").ValueKind, new[] { JsonValueKind.True, JsonValueKind.False });
         Assert.False(capabilities.GetProperty("has_camera").GetBoolean());
     }
 
