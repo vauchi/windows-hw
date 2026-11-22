@@ -77,13 +77,15 @@ public sealed class TcpDirectExchange : IDirectExchange
             client.SendTimeout = timeout;
             return DirectFrame.Exchange(client.GetStream(), payload, isInitiator);
         }
-        catch (DirectFrameException refused)
-        {
-            throw new DirectExchangeException($"exchange failed: {refused.Message}");
-        }
+        // First: a stop closes the socket, and the read it interrupts may end
+        // as a short frame (seen on Linux in CI) as well as an I/O error.
         catch (Exception) when (stop.IsCancellationRequested)
         {
             throw new OperationCanceledException(stop);
+        }
+        catch (DirectFrameException refused)
+        {
+            throw new DirectExchangeException($"exchange failed: {refused.Message}");
         }
         catch (AggregateException failed) when (failed.InnerException is SocketException socket)
         {
