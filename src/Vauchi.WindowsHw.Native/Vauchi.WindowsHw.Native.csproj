@@ -1,0 +1,18 @@
+<!-- SPDX-FileCopyrightText: 2026 Mattia Egloff <mattia.egloff@pm.me> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The Windows backends behind the ports: WinRT Bluetooth LE,
+         smart-card readers, cameras. Windows 10 2004 is the first build
+         whose projection holds everything used here. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Platforms>x64</Platforms>
+    <PackageId>vauchi-windows-hw-native</PackageId>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://gitlab.com/vauchi/windows-hw</RepositoryUrl>
+    <Description>Vauchi's hardware shell for Windows: the WinRT backends behind the ports (ADR-077)</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Vauchi.WindowsHw\Vauchi.WindowsHw.csproj" />
+  </ItemGroup>
+</Project>
