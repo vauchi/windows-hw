@@ -158,8 +158,20 @@ public sealed class DirectExchangeException : Exception
 /// The OS backends the shell runs on. A missing one leaves its commands
 /// refused and its capability unclaimed.
 /// </summary>
+/// <summary>
+/// The notification port: shows one notification Core prepared in every
+/// word. It throws <see cref="HardwareFailureException"/> when the OS says
+/// why it cannot.
+/// </summary>
+public interface INotifications
+{
+    Task PostAsync(NotificationSpec notification, EventSink events, CancellationToken stop);
+}
+
 public sealed record Backends
 {
+    public INotifications? Notifications { get; init; }
+
     public IDiscovery? Discovery { get; init; }
 
     public IAdvertising? Advertising { get; init; }

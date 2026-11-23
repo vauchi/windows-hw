@@ -61,6 +61,8 @@ public sealed class HardwareShell : IAsyncDisposable
     private readonly PortSession? _camera;
     private readonly ICamera? _cameraPort;
     private readonly DirectSession? _direct;
+    private readonly PortSession? _notifications;
+    private readonly INotifications? _notificationPort;
     private readonly List<PortSession> _sources = new();
     private string? _preview;
     private long? _wakeupDue;
@@ -108,6 +110,11 @@ public sealed class HardwareShell : IAsyncDisposable
         {
             _direct = new DirectSession(Source(Limits.Direct, DirectSession.Transport, DirectSession.Failure), direct);
         }
+        if (backends.Notifications is { } notifications)
+        {
+            _notifications = Source(Limits.Notification, "Notification", "notification failed");
+            _notificationPort = notifications;
+        }
     }
 
     /// <summary>The capability report the host dispatches to Core once, before any command.</summary>
@@ -147,6 +154,8 @@ public sealed class HardwareShell : IAsyncDisposable
             Command.DirectSend send when _direct is not null =>
                 Result(_direct.Send(send.Payload, send.IsInitiator, send.Endpoint)),
             Command.ScheduleWakeup wakeup => Schedule(wakeup.DelayMillis),
+            Command.PostNotification post when _notifications is not null =>
+                Result(_notifications.Start((events, stop) => _notificationPort!.PostAsync(post.Notification, events, stop))),
             _ => ExecuteResult.Unsupported,
         };
 
@@ -324,5 +333,8 @@ public sealed class HardwareShell : IAsyncDisposable
         internal static readonly InboxLimits Direct = new(1, 4, 1 << 19);
 
         internal static readonly InboxLimits Camera = new(1, 16, 1 << 16);
+
+        /// <summary>A post reports at most its failure.</summary>
+        internal static readonly InboxLimits Notification = new(1, 4, 1024);
     }
 }
