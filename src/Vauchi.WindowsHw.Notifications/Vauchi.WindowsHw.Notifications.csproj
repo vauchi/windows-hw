@@ -1,0 +1,31 @@
+<!-- SPDX-FileCopyrightText: 2026 Mattia Egloff <mattia.egloff@pm.me> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The notification port over the Windows App SDK's
+         AppNotificationManager, which posts for packaged and unpackaged
+         apps alike (the maintainer's choice, 2026-11-23, private#772). A
+         package of its own: the Windows App SDK builds on Windows only, and
+         only an app that posts notifications carries it. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Platforms>x64</Platforms>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <!-- No resources: the App SDK's PRI tasks, which plain dotnet build
+         cannot load, have nothing to index. -->
+    <EnableCoreMrtTooling>false</EnableCoreMrtTooling>
+    <AppxGeneratePriEnabled>false</AppxGeneratePriEnabled>
+    <PackageId>vauchi-windows-hw-notifications</PackageId>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://gitlab.com/vauchi/windows-hw</RepositoryUrl>
+    <Description>Vauchi's hardware shell for Windows: the notification port over the Windows App SDK (ADR-077)</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Vauchi.WindowsHw\Vauchi.WindowsHw.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The app's Windows App SDK line; the app resolves the build. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="[1.7.260224002,1.8)" />
+  </ItemGroup>
+</Project>
