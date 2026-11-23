@@ -98,6 +98,12 @@ public sealed class FakeCentral : ScriptedPort<Dial>, ICentral
         Run(new Dial(deviceId, requests), events, stop);
 }
 
+public sealed class FakeNotifications : ScriptedPort<NotificationSpec>, INotifications
+{
+    public Task PostAsync(NotificationSpec notification, EventSink events, CancellationToken stop) =>
+        Run(notification, events, stop);
+}
+
 public sealed record Capture(string PreviewId, CameraPurpose Purpose);
 
 public sealed class FakeCamera : ScriptedPort<Capture>, ICamera
