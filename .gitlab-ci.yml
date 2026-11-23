@@ -133,6 +133,9 @@ test:windows:
       Run 'dotnet' { dotnet --version }
       Run 'library tests' { dotnet test tests/Vauchi.WindowsHw.Tests/Vauchi.WindowsHw.Tests.csproj -c Release }
       Run 'decoder tests' { dotnet test tests/Vauchi.WindowsHw.Native.Tests/Vauchi.WindowsHw.Native.Tests.csproj -c Release }
+      Run 'notification tests' { dotnet test tests/Vauchi.WindowsHw.Notifications.Tests/Vauchi.WindowsHw.Notifications.Tests.csproj -c Release }
+      # The Windows App SDK builds on Windows only, so its package is packed here.
+      Run 'notifications package' { dotnet pack src/Vauchi.WindowsHw.Notifications/Vauchi.WindowsHw.Notifications.csproj -c Release -o target/nuget-windows }
       Run 'probe build' { dotnet build tools/Probe/Probe.csproj -c Release }
       Run 'helper process tests' { dotnet test tests/Vauchi.WindowsHw.Host.Tests/Vauchi.WindowsHw.Host.Tests.csproj -c Release }
       if (Test-Path target/host-aot) { Remove-Item -Recurse -Force target/host-aot }
@@ -146,6 +149,7 @@ test:windows:
     expire_in: 2 weeks
     paths:
       - target/host-aot/vauchi-hw-host.exe
+      - target/nuget-windows/
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -223,20 +227,25 @@ publish:nuget:
   stage: deploy
   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine3.21
   tags: [docker]
-  needs: ["contract:replay"]
+  needs:
+    - job: contract:replay
+      artifacts: true
+    - job: test:windows
+      artifacts: true
   script:
     - |
       set -eu
-      for name in vauchi-windows-hw vauchi-windows-hw-native; do
-        if [ ! -f "target/nuget/$name.${CI_COMMIT_TAG#v}.nupkg" ]; then
-          echo "ERROR: tag $CI_COMMIT_TAG has no package $name.${CI_COMMIT_TAG#v}.nupkg; Directory.Build.props and the tag disagree"
+      packages="target/nuget/vauchi-windows-hw target/nuget/vauchi-windows-hw-native target/nuget-windows/vauchi-windows-hw-notifications"
+      for package in $packages; do
+        if [ ! -f "$package.${CI_COMMIT_TAG#v}.nupkg" ]; then
+          echo "ERROR: tag $CI_COMMIT_TAG has no package $package.${CI_COMMIT_TAG#v}.nupkg; Directory.Build.props and the tag disagree"
           exit 1
         fi
       done
       dotnet nuget add source "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/nuget/index.json" --name gitlab --username gitlab-ci-token --password "${CI_JOB_TOKEN}" --store-password-in-clear-text
-      for name in vauchi-windows-hw vauchi-windows-hw-native; do
+      for package in $packages; do
         # A retried job finds its package already there and must not fail on it.
-        dotnet nuget push "target/nuget/$name.${CI_COMMIT_TAG#v}.nupkg" --source gitlab --skip-duplicate
+        dotnet nuget push "$package.${CI_COMMIT_TAG#v}.nupkg" --source gitlab --skip-duplicate
       done
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
