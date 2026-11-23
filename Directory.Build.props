@@ -13,6 +13,6 @@
     <IsAotCompatible>true</IsAotCompatible>
     <!-- The contract version every project here builds against, pinned
          exactly: an app holds one contract per binary (ADR-078 D-15). -->
-    <VauchiContractVersion>0.100.0</VauchiContractVersion>
+    <VauchiContractVersion>0.101.0</VauchiContractVersion>
   </PropertyGroup>
 </Project>

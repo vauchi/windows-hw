@@ -63,8 +63,8 @@
       },
       "Vauchi.Contract": {
         "type": "Transitive",
-        "resolved": "0.100.0",
-        "contentHash": "hIrSLm2qprw+rs8CTdtGk8toWtIEvieC2T9cqq9NHYAhlxEoYVooARWhFQ8zWcIslXCBSsnN8va3LaSalnlF2Q=="
+        "resolved": "0.101.0",
+        "contentHash": "xpcQPSDRRvSOcHXIDUiHa6maToqzOWPa50Lq8cc1OCb1SKSODF/G324P1Tgcqw2UljyYvCRgyD68ejYhAxyN3w=="
       },
       "xunit.abstractions": {
         "type": "Transitive",
@@ -109,7 +109,7 @@
       "vauchi-windows-hw": {
         "type": "Project",
         "dependencies": {
-          "Vauchi.Contract": "[0.100.0, 0.100.0]"
+          "Vauchi.Contract": "[0.101.0, 0.101.0]"
         }
       }
     }
