@@ -88,6 +88,16 @@ contract:replay:
     # The Windows backends compile here against the Windows SDK's reference
     # assemblies and are packed; nothing in them runs in this container.
     - dotnet pack src/Vauchi.WindowsHw.Native/Vauchi.WindowsHw.Native.csproj -c Release -o target/nuget
+    # zxing-cpp's native library rides in the package's build/zxing-cpp/
+    # and the dependency leaves it out, or a consumer's output folder holds
+    # it as ZXing.dll where ZXing.Net's zxing.dll is (private#772).
+    - |
+      set -eu
+      apk add --no-cache unzip > /dev/null
+      pkg=$(ls target/nuget/vauchi-windows-hw-native.*.nupkg)
+      unzip -l "$pkg" | grep -q ' build/zxing-cpp/ZXing.dll$' || { echo "ERROR: $pkg has no build/zxing-cpp/ZXing.dll"; exit 1; }
+      unzip -p "$pkg" vauchi-windows-hw-native.nuspec | grep 'id="ZXingCpp"' | grep -q 'exclude="[^"]*Native' || { echo "ERROR: $pkg's ZXingCpp dependency brings its native library"; exit 1; }
+      echo "$pkg carries zxing-cpp's native library in build/zxing-cpp/"
   artifacts:
     when: always
     paths:
@@ -122,6 +132,7 @@ test:windows:
       if (Test-Path "$installer\vswhere.exe") { $env:PATH = "$env:PATH;$installer" } else { Write-Host "no vswhere at $installer" }
       Run 'dotnet' { dotnet --version }
       Run 'library tests' { dotnet test tests/Vauchi.WindowsHw.Tests/Vauchi.WindowsHw.Tests.csproj -c Release }
+      Run 'decoder tests' { dotnet test tests/Vauchi.WindowsHw.Native.Tests/Vauchi.WindowsHw.Native.Tests.csproj -c Release }
       Run 'probe build' { dotnet build tools/Probe/Probe.csproj -c Release }
       Run 'helper process tests' { dotnet test tests/Vauchi.WindowsHw.Host.Tests/Vauchi.WindowsHw.Host.Tests.csproj -c Release }
       if (Test-Path target/host-aot) { Remove-Item -Recurse -Force target/host-aot }

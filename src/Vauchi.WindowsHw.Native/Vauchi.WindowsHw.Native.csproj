@@ -20,4 +20,22 @@
   <ItemGroup>
     <ProjectReference Include="..\Vauchi.WindowsHw\Vauchi.WindowsHw.csproj" />
   </ItemGroup>
+  <!-- The QR decoder. Its native library would land beside the
+       application as ZXing.dll, where ZXing.Net's zxing.dll is (the app
+       draws with ZXing.Net): the native asset is excluded, here and for
+       every consumer, and shipped in a folder of its own instead, which
+       ZxingCppDecoder loads from. -->
+  <ItemGroup>
+    <PackageReference Include="ZXingCpp" Version="[0.5.3]" ExcludeAssets="native" GeneratePathProperty="true" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(PkgZXingCpp)\runtimes\win-x64\native\ZXing.dll"
+          Link="zxing-cpp\ZXing.dll"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="build\zxing-cpp\ZXing.dll"
+          Visible="false" />
+    <None Include="build\vauchi-windows-hw-native.targets" Pack="true" PackagePath="build\;buildTransitive\" />
+  </ItemGroup>
 </Project>

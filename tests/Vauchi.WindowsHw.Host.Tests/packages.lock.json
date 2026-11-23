@@ -106,10 +106,15 @@
           "xunit.extensibility.core": "[2.9.2]"
         }
       },
+      "ZXingCpp": {
+        "type": "Transitive",
+        "resolved": "0.5.3",
+        "contentHash": "9/OpxmBgi0d1HRFYrhQ115Szyd/oAhcsG0p21Fp877sH2S+Fjnlrw3yhyCWhjd/uNQTaMnWkPUKfpaCuWXem7g=="
+      },
       "vauchi-hw-host": {
         "type": "Project",
         "dependencies": {
-          "vauchi-windows-hw-native": "[0.1.0, )"
+          "vauchi-windows-hw-native": "[0.6.0, )"
         }
       },
       "vauchi-windows-hw": {
@@ -121,10 +126,17 @@
       "vauchi-windows-hw-native": {
         "type": "Project",
         "dependencies": {
-          "vauchi-windows-hw": "[0.1.0, )"
+          "ZXingCpp": "[0.5.3, 0.5.3]",
+          "vauchi-windows-hw": "[0.6.0, )"
         }
       }
     },
-    "net8.0-windows10.0.19041/win-x64": {}
+    "net8.0-windows10.0.19041/win-x64": {
+      "ZXingCpp": {
+        "type": "Transitive",
+        "resolved": "0.5.3",
+        "contentHash": "9/OpxmBgi0d1HRFYrhQ115Szyd/oAhcsG0p21Fp877sH2S+Fjnlrw3yhyCWhjd/uNQTaMnWkPUKfpaCuWXem7g=="
+      }
+    }
   }
 }

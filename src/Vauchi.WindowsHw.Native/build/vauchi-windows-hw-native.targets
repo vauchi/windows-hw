@@ -1,0 +1,16 @@
+<!-- SPDX-FileCopyrightText: 2026 Mattia Egloff <mattia.egloff@pm.me> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<Project>
+  <!-- zxing-cpp's native library, in a folder of its own beside the
+       application (ZxingCppDecoder.NativeFolder): its file name, ZXing.dll,
+       is ZXing.Net's assembly name, zxing.dll, on a case-insensitive file
+       system (vauchi/private#772). The package holds the file once, under
+       build/, and this file is in build/ and buildTransitive/. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\build\zxing-cpp\ZXing.dll"
+          Link="zxing-cpp\ZXing.dll"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          Visible="false" />
+  </ItemGroup>
+</Project>
