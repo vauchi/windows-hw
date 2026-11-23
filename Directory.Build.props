@@ -4,7 +4,7 @@
   <PropertyGroup>
     <!-- The release: merging a change of this line to main tags v<Version>
          (auto-tag:version) and the tag publishes the package. -->
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <Nullable>enable</Nullable>
     <LangVersion>12</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
