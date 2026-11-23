@@ -18,16 +18,31 @@ namespace Vauchi.WindowsHw.Native;
 /// </summary>
 public static class WindowsProbe
 {
-    public static async Task<DeviceCapabilities> ProbeAsync() => new()
+    public static async Task<DeviceCapabilities> ProbeAsync()
     {
-        HasBle = await Has(BluetoothLowEnergy).ConfigureAwait(false),
-        HasNfc = await Has(SmartCardReader).ConfigureAwait(false),
-        HasCamera = await Has(Camera).ConfigureAwait(false),
-        // As linux-hw reports it: whether the network is there and what it
-        // costs reaches Core as its own events.
-        HasInternet = true,
-        Platform = Platform.Desktop,
-    };
+        (bool hasCamera, byte? cameraCount) = Cameras(await ListedCameras().ConfigureAwait(false));
+        return new DeviceCapabilities
+        {
+            HasBle = await Has(BluetoothLowEnergy).ConfigureAwait(false),
+            HasNfc = await Has(SmartCardReader).ConfigureAwait(false),
+            HasCamera = hasCamera,
+            CameraCount = cameraCount,
+            // As linux-hw reports it: whether the network is there and what it
+            // costs reaches Core as its own events.
+            HasInternet = true,
+            Platform = Platform.Desktop,
+        };
+    }
+
+    /// <summary>
+    /// The camera fields of the report from the number of cameras Windows
+    /// lists, or null when the question failed. Core offers a switch between
+    /// cameras only when the count says there is more than one.
+    /// </summary>
+    public static (bool HasCamera, byte? CameraCount) Cameras(int? listed) =>
+        listed is int count
+            ? (count > 0, (byte)Math.Clamp(count, 0, byte.MaxValue))
+            : (false, null);
 
     private static async Task<bool> Has(Func<Task<bool>> ask)
     {
@@ -55,9 +70,16 @@ public static class WindowsProbe
         return readers.Count > 0;
     }
 
-    private static async Task<bool> Camera()
+    private static async Task<int?> ListedCameras()
     {
-        DeviceInformationCollection cameras = await DeviceInformation.FindAllAsync(DeviceClass.VideoCapture);
-        return cameras.Count > 0;
+        try
+        {
+            DeviceInformationCollection cameras = await DeviceInformation.FindAllAsync(DeviceClass.VideoCapture);
+            return cameras.Count;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 }
