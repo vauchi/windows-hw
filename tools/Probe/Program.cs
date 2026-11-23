@@ -131,6 +131,71 @@ if (args.Length > 0 && args[0] == "publish")
     return;
 }
 
+if (args.Length > 1 && args[0] == "frames")
+{
+    // frames <dir> [seconds] [keep]: grey frames from the first colour
+    // camera, saved as PGM, so decoders can be compared on the same input.
+    string folder = args[1];
+    int lasting = args.Length > 2 ? int.Parse(args[2]) : 20;
+    int keep = args.Length > 3 ? int.Parse(args[3]) : 120;
+    System.IO.Directory.CreateDirectory(folder);
+    var groups = await Windows.Media.Capture.Frames.MediaFrameSourceGroup.FindAllAsync();
+    var (group, colour) = groups
+        .SelectMany(g => g.SourceInfos.Select(s => (g, s)))
+        .FirstOrDefault(pair => pair.s.SourceKind == Windows.Media.Capture.Frames.MediaFrameSourceKind.Color);
+    if (group is null)
+    {
+        Console.WriteLine($"no colour camera among {groups.Count} source group(s)");
+        return;
+    }
+    Console.WriteLine($"camera: {group.DisplayName} ({colour.DeviceInformation?.Name}) stream {colour.MediaStreamType}");
+    using var camera = new Windows.Media.Capture.MediaCapture();
+    await camera.InitializeAsync(new Windows.Media.Capture.MediaCaptureInitializationSettings
+    {
+        SourceGroup = group,
+        SharingMode = Windows.Media.Capture.MediaCaptureSharingMode.ExclusiveControl,
+        MemoryPreference = Windows.Media.Capture.MediaCaptureMemoryPreference.Cpu,
+        StreamingCaptureMode = Windows.Media.Capture.StreamingCaptureMode.Video,
+    });
+    var source = camera.FrameSources[colour.Id];
+    Console.WriteLine($"format: {source.CurrentFormat.Subtype} {source.CurrentFormat.VideoFormat.Width}x{source.CurrentFormat.VideoFormat.Height} @ {source.CurrentFormat.FrameRate.Numerator}/{source.CurrentFormat.FrameRate.Denominator}");
+    var reader = await camera.CreateFrameReaderAsync(source);
+    int arrived = 0, saved = 0;
+    var done = new TaskCompletionSource();
+    reader.FrameArrived += (sender, _) =>
+    {
+        using var frame = sender.TryAcquireLatestFrame();
+        var bitmap = frame?.VideoMediaFrame?.SoftwareBitmap;
+        if (bitmap is null)
+        {
+            return;
+        }
+        arrived++;
+        if (saved >= keep || arrived % 2 != 0)
+        {
+            return;
+        }
+        using var grey = Windows.Graphics.Imaging.SoftwareBitmap.Convert(bitmap, Windows.Graphics.Imaging.BitmapPixelFormat.Gray8);
+        var buffer = new Windows.Storage.Streams.Buffer((uint)(grey.PixelWidth * grey.PixelHeight));
+        grey.CopyToBuffer(buffer);
+        Windows.Security.Cryptography.CryptographicBuffer.CopyToByteArray(buffer, out byte[] pixels);
+        byte[] header = Encoding.ASCII.GetBytes($"P5\n{grey.PixelWidth} {grey.PixelHeight}\n255\n");
+        using var file = System.IO.File.Create(System.IO.Path.Combine(folder, $"frame-{saved:D4}.pgm"));
+        file.Write(header);
+        file.Write(pixels);
+        saved++;
+        if (saved >= keep)
+        {
+            done.TrySetResult();
+        }
+    };
+    await reader.StartAsync();
+    await Task.WhenAny(done.Task, Task.Delay(TimeSpan.FromSeconds(lasting)));
+    await reader.StopAsync();
+    Console.WriteLine($"{arrived} frame(s) arrived, {saved} saved in {folder}");
+    return;
+}
+
 if (args.Length > 1 && args[0] == "steps")
 {
     // steps <service-uuid> [seconds]: the central's OS calls one at a time

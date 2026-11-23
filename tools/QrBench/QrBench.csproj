@@ -1,0 +1,28 @@
+<!-- SPDX-FileCopyrightText: 2026 Mattia Egloff <mattia.egloff@pm.me> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Compares QR decoders on the same saved camera frames (Probe frames),
+         so the camera port's decoder is chosen on measurement. Not shipped. -->
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>vauchi-qr-bench</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <!-- One decoder per build (-p:Decoder=net or cpp): ZXingCpp's native
+       library is named ZXing.dll and replaces ZXing.Net's zxing.dll in a
+       shared folder on a case-insensitive file system. -->
+  <PropertyGroup>
+    <Decoder Condition="'$(Decoder)' == ''">net</Decoder>
+    <DefineConstants Condition="'$(Decoder)' == 'cpp'">$(DefineConstants);ZXING_CPP</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Decoder)' == 'net'">
+    <PackageReference Include="ZXing.Net" Version="[0.16.11]" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Decoder)' == 'cpp'">
+    <PackageReference Include="ZXingCpp" Version="[0.5.3]" />
+  </ItemGroup>
+</Project>
