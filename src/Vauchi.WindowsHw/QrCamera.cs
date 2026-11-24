@@ -24,7 +24,11 @@ public interface ILumaFrames : IAsyncDisposable
 /// </summary>
 public interface ICameraSource
 {
-    Task<ILumaFrames> OpenAsync(CancellationToken stop);
+    /// <param name="previewId">
+    /// Core's id for this capture: the display shell shows the preview in the
+    /// surface it hosts under the same id (ADR-077 amendment 2026-11-01).
+    /// </param>
+    Task<ILumaFrames> OpenAsync(string previewId, CancellationToken stop);
 }
 
 /// <summary>Every QR code a decoder finds in one frame, in the order found.</summary>
@@ -59,7 +63,7 @@ public sealed class QrCamera(ICameraSource source, IQrDecoder decoder) : ICamera
                 stop).ConfigureAwait(false);
             return;
         }
-        ILumaFrames frames = await source.OpenAsync(stop).ConfigureAwait(false);
+        ILumaFrames frames = await source.OpenAsync(previewId, stop).ConfigureAwait(false);
         await using (frames.ConfigureAwait(false))
         {
             while (await frames.NextAsync(stop).ConfigureAwait(false) is { } frame)

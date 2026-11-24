@@ -13,11 +13,13 @@ using Windows.Security.Cryptography;
 namespace Vauchi.WindowsHw.Native;
 
 /// <summary>
-/// The first colour camera through WinRT's frame reader, as grey frames.
-/// What a frame means is <see cref="QrCamera"/>'s; this only makes the OS
-/// calls.
+/// The first colour camera through WinRT's frame reader, as grey frames,
+/// and as colour frames to the preview output attached for the capture's
+/// preview id, if any. What a frame means is <see cref="QrCamera"/>'s; this
+/// only makes the OS calls.
 /// </summary>
-public sealed class WinRtCameraSource : ICameraSource
+/// <param name="previews">Where previews are shown; none when null.</param>
+public sealed class WinRtCameraSource(PreviewOutputs? previews = null) : ICameraSource
 {
     /// <summary>
     /// Frames the decoder has not taken yet. A camera's frames are
@@ -25,7 +27,7 @@ public sealed class WinRtCameraSource : ICameraSource
     /// </summary>
     private const int Waiting = 2;
 
-    public async Task<ILumaFrames> OpenAsync(CancellationToken stop)
+    public async Task<ILumaFrames> OpenAsync(string previewId, CancellationToken stop)
     {
         var groups = await MediaFrameSourceGroup.FindAllAsync().AsTask(stop).ConfigureAwait(false);
         var (group, colour) = groups
@@ -36,7 +38,7 @@ public sealed class WinRtCameraSource : ICameraSource
             throw new HardwareFailureException(HardwareFailure.Unavailable);
         }
         var capture = new MediaCapture();
-        var frames = new Frames(capture);
+        var frames = new Frames(capture, previewId, previews);
         try
         {
             await capture.InitializeAsync(new MediaCaptureInitializationSettings
@@ -63,7 +65,7 @@ public sealed class WinRtCameraSource : ICameraSource
         }
     }
 
-    private sealed class Frames(MediaCapture capture) : ILumaFrames
+    private sealed class Frames(MediaCapture capture, string previewId, PreviewOutputs? previews) : ILumaFrames
     {
         private readonly Channel<LumaFrame> _frames = Channel.CreateBounded<LumaFrame>(
             new BoundedChannelOptions(Waiting) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
@@ -120,6 +122,7 @@ public sealed class WinRtCameraSource : ICameraSource
                 {
                     return;
                 }
+                Preview(bitmap);
                 using SoftwareBitmap grey = SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Gray8);
                 var buffer = new Windows.Storage.Streams.Buffer((uint)(grey.PixelWidth * grey.PixelHeight));
                 grey.CopyToBuffer(buffer);
@@ -129,6 +132,24 @@ public sealed class WinRtCameraSource : ICameraSource
             catch (Exception)
             {
                 // A frame Windows could not hand over is a frame skipped; an exception here has no caller.
+            }
+        }
+
+        private void Preview(SoftwareBitmap bitmap)
+        {
+            if (previews is null || !previews.TryGet(previewId, out IPreviewOutput? output))
+            {
+                return;
+            }
+            try
+            {
+                using SoftwareBitmap colour = SoftwareBitmap.Convert(
+                    bitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+                output.Show(colour);
+            }
+            catch (Exception)
+            {
+                // A preview that fails to draw a frame must not cost the scan that frame.
             }
         }
     }
