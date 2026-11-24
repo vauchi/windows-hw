@@ -32,16 +32,19 @@ public class QrCameraTests
 
         public Task Closed => _closed.Task.WaitAsync(Wait.Limit);
 
+        public string? OpenedFor { get; private set; }
+
         public void Show(LumaFrame frame) => _frames.Writer.TryWrite(frame);
 
         public void End() => _frames.Writer.TryWrite(null);
 
-        public Task<ILumaFrames> OpenAsync(CancellationToken stop)
+        public Task<ILumaFrames> OpenAsync(string previewId, CancellationToken stop)
         {
             if (OpenFailure is { } failure)
             {
                 throw new HardwareFailureException(failure);
             }
+            OpenedFor = previewId;
             _opened.TrySetResult();
             return Task.FromResult<ILumaFrames>(this);
         }
@@ -92,6 +95,20 @@ public class QrCameraTests
         new Command.CameraCapture { PreviewId = preview, Purpose = CameraPurpose.QrScan };
 
     private static string Scanned(string data) => new Event.QrScanned { Data = data }.Wire();
+
+    [Fact]
+    public async Task TheCameraIsOpenedForCoresPreviewSoItsFramesReachThatViewport()
+    {
+        // ADR-077 amendment 2026-11-01: the hardware shell draws its preview
+        // into the surface the display shell hosts under the same preview id.
+        var source = new FakeSource();
+        await using HardwareShell shell = ShellOver(source, new FakeDecoder());
+
+        shell.Execute(Scan("camera-7"));
+        await source.Opened;
+
+        Assert.Equal("camera-7", source.OpenedFor);
+    }
 
     [Fact]
     public async Task FramesAreReadUntilOneCarriesACodeWhichIsReportedOnceAndTheCameraIsReleased()
