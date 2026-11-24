@@ -134,8 +134,11 @@ test:windows:
       Run 'library tests' { dotnet test tests/Vauchi.WindowsHw.Tests/Vauchi.WindowsHw.Tests.csproj -c Release }
       Run 'decoder tests' { dotnet test tests/Vauchi.WindowsHw.Native.Tests/Vauchi.WindowsHw.Native.Tests.csproj -c Release }
       Run 'notification tests' { dotnet test tests/Vauchi.WindowsHw.Notifications.Tests/Vauchi.WindowsHw.Notifications.Tests.csproj -c Release }
+      # Drawn on WARP, Windows' software rasterizer: the runner has no graphics card.
+      Run 'preview tests' { dotnet test tests/Vauchi.WindowsHw.Preview.Tests/Vauchi.WindowsHw.Preview.Tests.csproj -c Release }
       # The Windows App SDK builds on Windows only, so its package is packed here.
       Run 'notifications package' { dotnet pack src/Vauchi.WindowsHw.Notifications/Vauchi.WindowsHw.Notifications.csproj -c Release -o target/nuget-windows }
+      Run 'preview package' { dotnet pack src/Vauchi.WindowsHw.Preview/Vauchi.WindowsHw.Preview.csproj -c Release -o target/nuget-windows }
       Run 'probe build' { dotnet build tools/Probe/Probe.csproj -c Release }
       Run 'helper process tests' { dotnet test tests/Vauchi.WindowsHw.Host.Tests/Vauchi.WindowsHw.Host.Tests.csproj -c Release }
       if (Test-Path target/host-aot) { Remove-Item -Recurse -Force target/host-aot }
@@ -235,7 +238,7 @@ publish:nuget:
   script:
     - |
       set -eu
-      packages="target/nuget/vauchi-windows-hw target/nuget/vauchi-windows-hw-native target/nuget-windows/vauchi-windows-hw-notifications"
+      packages="target/nuget/vauchi-windows-hw target/nuget/vauchi-windows-hw-native target/nuget-windows/vauchi-windows-hw-notifications target/nuget-windows/vauchi-windows-hw-preview"
       for package in $packages; do
         if [ ! -f "$package.${CI_COMMIT_TAG#v}.nupkg" ]; then
           echo "ERROR: tag $CI_COMMIT_TAG has no package $package.${CI_COMMIT_TAG#v}.nupkg; Directory.Build.props and the tag disagree"
