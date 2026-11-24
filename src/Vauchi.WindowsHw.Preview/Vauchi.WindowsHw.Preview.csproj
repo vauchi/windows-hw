@@ -1,0 +1,28 @@
+<!-- SPDX-FileCopyrightText: 2026 Mattia Egloff <mattia.egloff@pm.me> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The camera preview: frames drawn through Direct3D into a swap chain
+         handed to the display shell's neutral surface (ADR-077 amendment
+         2026-11-01, private#772). A package of its own: Direct3D interop
+         is for an app that shows a preview, not for the helper compiled
+         ahead of time. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Platforms>x64</Platforms>
+    <IsAotCompatible>false</IsAotCompatible>
+    <PackageId>vauchi-windows-hw-preview</PackageId>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://gitlab.com/vauchi/windows-hw</RepositoryUrl>
+    <Description>Vauchi's hardware shell for Windows: the camera preview drawn through Direct3D (ADR-077)</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Vauchi.WindowsHw.Native\Vauchi.WindowsHw.Native.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct3D11" Version="[3.8.3]" />
+    <PackageReference Include="Vortice.DXGI" Version="[3.8.3]" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Vauchi.WindowsHw.Preview.Tests" />
+  </ItemGroup>
+</Project>
